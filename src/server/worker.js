@@ -1,6 +1,8 @@
 const fs = require('fs');
 require('dotenv').config();
 const Twitter = require('twitter');
+const aws = require('aws-sdk');
+const { config } = require('dotenv/types');
 
 const client = new Twitter({
     consumer_key: process.env.CONSUMER_KEY,
@@ -26,6 +28,17 @@ const image = images[Math.floor(Math.random() * images.length)];
 console.log(image);
 
 // TODO: Get image from amazon S3 bucket
+const s3 = aws.S3();
+const params = {
+    Bucket: process.env.S3_BUCKET,
+    Key: image
+};
+s3.getObject(params, function(err, data) {
+    if (err) console.log(err);
+    // todo... 
+    // Tester avec async await ou promise parce que 50 fonctions 
+    // embriquées c'est chiant
+})
 
 // Tweet cette image
 client.post('media/upload', {media: image}, function(err, media, res) {

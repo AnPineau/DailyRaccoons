@@ -3,6 +3,7 @@ const helmet = require('helmet');
 const volleyball = require('volleyball');
 const path = require('path');
 const fs = require('fs');
+const aws = require('aws-sdk');
 
 const app = express();
 
@@ -26,12 +27,41 @@ app.get('/', (req, res) => {
 });
 
 app.get('/images', (req, res) => {
-    const images = fs.readdirSync('../../assets');
-    res.send(images);
+    fs.readFile('store.json', (err, data) => {
+        if (err) return res.status(404).send(err);
+        const images = JSON.parse(data);
+        return res.send(images);
+    });
 });
 
 app.get('/upload', async(req, res) => {
     return res.send('ici upload oui');
+});
+
+app.get('/sign-key', async(req, res) => {
+    const S3_BUCKET = process.env.S3_BUCKET;
+    const s3 = new aws.S3();
+    const fileName = req.query['file-name'];
+    const fileType = req.query['file-type'];
+    const s3Params = {
+        Bucket: S3_BUCKET,
+        Key: fileName,
+        Expires: 60,
+        ContentType: fileType,
+        ACL: 'public-read'
+    };
+    s3.getSignedUrl('putObject', s3Params, (err, data) => {
+        if (err) {
+            console.log(err);
+            return res.end();
+        }
+        const returnData = {
+            signedRequest: data,
+            url: `https://${S3_BUCKET}.s3.amazonaws.com/${fileName}`
+        };
+        res.write(JSON.stringify(returnData));
+        res.end();
+    });
 });
 
 app.use('/assets', express.static(path.join(__dirname + '../../../assets')));
