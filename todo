@@ -1,18 +1,3 @@
-worker.js: 
-    - Retrieve image from S3bucket in order to post it on twitter
-
-frontend & backend: 
-    - Amazon s3 signed upload, tuto favoris par heroku
-
-frontend: 
-    - Après avoir fait s3 signed, virer le truc precedent (res.send(fstruc));
-    - Resize les images ? (ou checked la taille etc)
-        Twitter = 5mo max
-    - Loading gif (loading & success) for uploads
-
-backend: 
-    - Gerer l'upload des images avec s3 buckets
-
 
 Pre-deploy: 
     - front => changer url pour axios

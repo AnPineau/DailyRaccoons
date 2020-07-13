@@ -2,7 +2,14 @@ const fs = require('fs');
 require('dotenv').config();
 const Twitter = require('twitter');
 const aws = require('aws-sdk');
-const { config } = require('dotenv/types');
+
+aws.config.update({
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    accessKeyId: process.env.AWS_ACCESS_KEY,
+    region: process.env.AWS_REGION
+});
+
+const s3 = new aws.S3();
 
 const client = new Twitter({
     consumer_key: process.env.CONSUMER_KEY,
@@ -11,54 +18,68 @@ const client = new Twitter({
     access_token_secret: process.env.ACCESS_TOKEN_SECRET
 })
 
-const assets = '../../assets/';
+async function getObject(objectKey) {
+    try {
+        const params = {
+            Bucket: process.env.S3_BUCKET,
+            Key: objectKey
+        };
+        const data = await s3.getObject(params).promise();
+        /* return data.Body.toString('utf-8'); */
+        return data.Body;
+    } catch(err) {
+        throw new Error('Could not retrieve file from s3: '+err.message);
+    }
+}
 
-// Récupère le dossier ../../assets
-const images = fs.readdirSync(assets);
-console.log(images);
-
+// Lit les noms d'images dans store.json
 let images = null;
-fs.readFile('store.json', (err, data) => {
+fs.readFile('store.json', 'utf-8', async (err, data) => {
     images = JSON.parse(data);
     console.log(data);
-});
 
-// Prend une image aléatoire
-const image = images[Math.floor(Math.random() * images.length)];
-console.log(image);
+    if (images.length === 0) throw new Error('No image available');
 
-// TODO: Get image from amazon S3 bucket
-const s3 = aws.S3();
-const params = {
-    Bucket: process.env.S3_BUCKET,
-    Key: image
-};
-s3.getObject(params, function(err, data) {
-    if (err) console.log(err);
-    // todo... 
-    // Tester avec async await ou promise parce que 50 fonctions 
-    // embriquées c'est chiant
-})
+    // Prend une image aléatoire
+    const image = images[Math.floor(Math.random() * images.length)];
+    console.log(image);
 
-// Tweet cette image
-client.post('media/upload', {media: image}, function(err, media, res) {
-    if(!err) {
-        /* console.log(media); */
-        const status = {
-            media_ids: media.media_id_string
-        };
-
-        client.post('statuses/update', status, function(err, tweet, res) {
+    // TODO: Get image from amazon S3 bucket
+    const image_key = image.split('\\').pop().split('/').pop();
+    
+    try {
+        console.log('url: ' + image_key);
+        const file = await getObject(image_key);
+        console.log(file);
+        // Tweet cette image
+        client.post('media/upload', {media: file}, function(err, media, res) {
             if(!err) {
-                /* console.log(tweet); */
-                // Si succès delete l'image
-                const newImages = images.filter(item => item !== image);
-                console.log(newImages);
-                fs.writeFile('store.json', JSON.stringify(newImages), (err) => {
-                    if (err) console.log(err);
-                    console.log('successfully written');
+                console.log(media);
+                const status = {
+                    media_ids: media.media_id_string
+                };
+
+                client.post('statuses/update', status, function(err, tweet, res) {
+                    if(!err) {
+                        console.log(tweet);
+                        // Si succès delete l'image
+                        const newImages = images.filter(item => item !== image);
+                        console.log(newImages);
+                        fs.writeFile('store.json', JSON.stringify(newImages), (err) => {
+                            if (err) console.log(err);
+                            console.log('successfully written');
+                        });
+                    } else {
+                        console.log(err);
+                    }
                 });
+            } else {
+                console.log(err);
             }
         });
+    } catch(err) {
+        console.log(err);
     }
+    
+
 });
