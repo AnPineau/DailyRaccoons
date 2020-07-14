@@ -4,6 +4,7 @@ const volleyball = require('volleyball');
 const path = require('path');
 const fs = require('fs');
 const aws = require('aws-sdk');
+const MongoClient = require('mongodb').MongoClient;
 
 const app = express();
 
@@ -27,11 +28,20 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
-// Routes
-
-app.get('/', (req, res) => {
-    return res.send('youpi ça marche 💪');
+// Database connection
+const uri = process.env.MONGO_URI;
+mongoose.connect(uri, {
+	useNewUrlParser: true,
+	useUnifiedTopology: true,
+	dbName: "dailyraccoons"
+})
+.then(res => {
+	console.log(`Connected to db: ${uri}`);
+})
+.catch(err => {
+	console.log(err.message);
 });
+
 
 app.get('/images', async (req, res) => {
     fs.readFile('store.json', 'utf-8', (err, data) => {
@@ -89,11 +99,10 @@ app.get('/sign-s3', async(req, res) => {
     });
 });
 
-app.use('/assets', express.static(path.join(__dirname + '../../../assets')));
 
 if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(__dirname + '/dist'));
-    app.get(/.*/, (req, res) => res.sendFile(__dirname + '../../../dist/index.html'));
+    app.use(express.static(__dirname + '/public/'));
+    app.get(/.*/, (req, res) => res.sendFile(__dirname + '/public/index.html'));
 }
 
 
