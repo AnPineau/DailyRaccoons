@@ -4,7 +4,6 @@ const volleyball = require('volleyball');
 const path = require('path');
 const fs = require('fs');
 const aws = require('aws-sdk');
-const MongoClient = require('mongodb').MongoClient;
 
 const app = express();
 
@@ -21,6 +20,13 @@ aws.config.update({
 });
 
 const s3 = new aws.S3();
+const uri = process.env.MONGO_URI;
+/* const db = require('monk')(uri).then(() => {
+    console.log('connected to db');
+}).catch(err => console.log(err)); */
+const monk = require('monk');
+const db = monk(uri);
+const images = db.get('images');
 
 app.use(helmet());
 app.use(volleyball);
@@ -28,50 +34,46 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
-// Database connection
-const uri = process.env.MONGO_URI;
-mongoose.connect(uri, {
-	useNewUrlParser: true,
-	useUnifiedTopology: true,
-	dbName: "dailyraccoons"
-})
-.then(res => {
-	console.log(`Connected to db: ${uri}`);
-})
-.catch(err => {
-	console.log(err.message);
-});
-
-
 app.get('/images', async (req, res) => {
-    fs.readFile('store.json', 'utf-8', (err, data) => {
-        if (err) return res.status(404).send(err);
-        if (!data) return res.send([]);
-        const images = JSON.parse(data);
-        return res.send(images);
-    });
+    try {
+        const imgs = await images.find();
+        return res.send(imgs);
+    } catch(err) {
+        return res.send(err);
+    }
+    
 });
 
 app.post('/upload', async (req, res) => {
-    if (!req.body.images) return res.status(418).send('names null');
-    fs.readFile('store.json', 'utf-8', (err, data) => {
-        if (err) return res.send(err);
-        console.log('data V');
-        console.log(data);
-        console.log(JSON.parse(JSON.stringify(data)));
-        
-        let images = [];
-        if (data) images = JSON.parse(data);
-            
-        const newImages = req.body.images;
-        console.log(images);
-        console.log(newImages);
-        const allImages = images.concat(newImages);
-        fs.writeFile('store.json', JSON.stringify(allImages), (err) => {
-            if (err) console.log(err);
+    if (!req.body.images) return res.status(418).send('body null');
+    const urls = req.body.images;
+    const promises = [];
+    try {
+        urls.forEach(url => {
+            promises.push(images.insert({ url: url }));
         });
-        return res.send(allImages);
+        Promise.all(promises).then((result) => {
+            images.find().then((result) => {
+                res.send(result);
+            });
+        }).catch(err => console.log(err)).then(() => {
+            db.close();
+        });
+    } catch(err) {
+        console.log(err);
+    }
+});
+
+app.delete('/images', async(req, res) => {
+    if (!req.body.images) return res.status(404).send('body.images null');
+    let toDelete = req.body.images;
+    const promises = [];
+    toDelete.forEach(item => {
+        promises.push(images.remove(item));
     });
+    Promise.all(promises).then((prom) => {
+        return res.send('deleted');
+    }).catch(err => console.log(err));
 });
 
 app.get('/sign-s3', async(req, res) => {

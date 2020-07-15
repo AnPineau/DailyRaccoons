@@ -1,4 +1,3 @@
-const fs = require('fs');
 const Twitter = require('twitter');
 const aws = require('aws-sdk');
 
@@ -12,6 +11,9 @@ aws.config.update({
 });
 
 const s3 = new aws.S3();
+const uri = process.env.MONGO_URI;
+const db = require('monk')(uri);
+const images = db.get('images');
 
 const client = new Twitter({
     consumer_key: process.env.CONSUMER_KEY,
@@ -21,6 +23,7 @@ const client = new Twitter({
 })
 
 async function getObject(objectKey) {
+    console.log(objectKey);
     try {
         const params = {
             Bucket: process.env.S3_BUCKET,
@@ -34,25 +37,31 @@ async function getObject(objectKey) {
     }
 }
 
-// Lit les noms d'images dans store.json
-let images = null;
-fs.readFile('store.json', 'utf-8', async (err, data) => {
-    images = JSON.parse(data);
-    /* console.log(data); */
+// Lit les images dans la database
+images.find().then(async(result) => {
 
-    if (images.length === 0) throw new Error('No image available');
+    if (result.length === 0) {
+        db.close();
+        throw new Error('No files stored in database');
+    }
+
+    const urls = [];
+    result.forEach(item => {
+        urls.push(item.url);
+    });
 
     // Prend une image aléatoire
-    const image = images[Math.floor(Math.random() * images.length)];
+    const image = urls[Math.floor(Math.random() * urls.length)];
     console.log(image);
 
-    // TODO: Get image from amazon S3 bucket
+    // Garde la key de l'object (filename)
     const image_key = image.split('\\').pop().split('/').pop();
-    
+
     try {
+        // Get l'image depuis le bucket amazon
         console.log('url: ' + image_key);
         const file = await getObject(image_key);
-        /* console.log(file); */
+
         // Tweet cette image
         client.post('media/upload', {media: file}, function(err, media, res) {
             if(!err) {
@@ -63,15 +72,26 @@ fs.readFile('store.json', 'utf-8', async (err, data) => {
 
                 client.post('statuses/update', status, function(err, tweet, res) {
                     if(!err) {
-                        /* console.log(tweet); */
+
                         console.log(image + ' tweeted');
-                        // Si succès delete l'image
-                        const newImages = images.filter(item => item !== image);
-                        /* console.log(newImages); */
-                        fs.writeFile('store.json', JSON.stringify(newImages), (err) => {
-                            if (err) console.log(err);
-                            console.log(image + ' deleted');
+
+                        // Si succès delete l'image du bucket amazon
+                        const toDelete = urls.filter(url => url === image);
+                        const params = {
+                            Key: image_key,
+                            Bucket: process.env.S3_BUCKET
+                        };
+                        s3.deleteObject(params, (err, data) => {
+                            if(err) console.log(err, err.stack);
+                            else console.log(image_key + ' removed from bucket');
                         });
+
+                        // Si succès delete l'image de la database
+                        images.remove({ url : image }).then(() => {
+                            console.log(toDelete + ' removed from database');
+                            db.close();
+                        }).catch(err => console.log(err));
+
                     } else {
                         console.log(err);
                     }
@@ -83,6 +103,10 @@ fs.readFile('store.json', 'utf-8', async (err, data) => {
     } catch(err) {
         console.log(err);
     }
-    
 
+    /* process.exit(); */
+
+}).catch(err => {
+    console.log(err);
 });
+

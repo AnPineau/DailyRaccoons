@@ -29,7 +29,7 @@
     <h2 class="gallery-title">Waiting list</h2>
     <div v-if="loaded" class="gallery">
       <div class="image" v-for="(image, index) in images" :item="image" :index="index" :key="index">
-        <img :src="image" />
+        <img :src="image.url" />
       </div>
     </div>
 
@@ -49,6 +49,7 @@ export default {
   data() {
     return {
       backend_url: 'https://daily-raccoons.herokuapp.com/',
+    /*   backend_url: 'http://localhost:5000/', */
       images: [],
       loaded: false,
       uploading: false,
@@ -63,7 +64,7 @@ export default {
         addRemoveLinks: true,
         thumbnailMethod: 'contain',
         maxFilesize: 5,
-        acceptedFiles: '.jpg, .png'
+        acceptedFiles: '.jpg, .png, .gif'
 
       }
     };
